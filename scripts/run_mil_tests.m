@@ -9,7 +9,6 @@ function results = run_mil_tests()
 %                     message (also appended to the GitHub Actions job summary
 %                     when GITHUB_STEP_SUMMARY is set)
 %     plots/*.png     signal plots, one per test
-%     model/*.png     pictures of the built model (best effort)
 %   Throws an error when a test fails, so the CI job fails.
 
     root = inv_ctrl_setup();
@@ -40,7 +39,6 @@ function results = run_mil_tests()
     elapsed = toc(t0);
 
     writeSummary(suite, results, resultsDir, elapsed);
-    exportModelPictures(root, resultsDir);
 
     bad = [results.Failed] | [results.Incomplete];
     if any(bad)
@@ -152,34 +150,5 @@ function s = mdCell(s)
     s = strrep(s, '|', '\|');
     if numel(s) > 600
         s = [s(1:597) '...'];
-    end
-end
-
-% =====================================================================================
-function exportModelPictures(root, resultsDir)
-    % pictures of the generated model for reviewers without MATLAB (best effort)
-    slx = fullfile(root, 'work', 'InvCtrl.slx');
-    if ~isfile(slx)
-        return
-    end
-    outDir = fullfile(resultsDir, 'model');
-    if ~isfolder(outDir)
-        mkdir(outDir);
-    end
-    systems = {'InvCtrl', 'InvCtrl/InvStateMachine', 'InvCtrl/FaultMonitor', ...
-               'InvCtrl/Derating', 'InvCtrl/TorqueToCurrent', 'InvCtrl/CurrentCtrl'};
-    try
-        load_system(slx);
-        for k = 1:numel(systems)
-            file = fullfile(outDir, [strrep(systems{k}, '/', '__') '.png']);
-            try
-                print(['-s' systems{k}], '-dpng', file);
-            catch err
-                fprintf('model picture of %s not exported: %s\n', systems{k}, err.message);
-            end
-        end
-        close_system('InvCtrl', 0);
-    catch err
-        fprintf('model pictures not exported: %s\n', err.message);
     end
 end

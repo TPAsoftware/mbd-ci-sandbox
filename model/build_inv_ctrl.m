@@ -76,6 +76,7 @@ function configureModel(mdl, Ts)
     set_param(mdl, 'SaveTime', 'on', 'TimeSaveName', 'tout', 'SaveState', 'off');
     set_param(mdl, 'LimitDataPoints', 'off', 'ReturnWorkspaceOutputs', 'on');
     set_param(mdl, 'AlgebraicLoopMsg', 'error');
+    set_param(mdl, 'ParameterPrecisionLossMsg', 'none');   % double parameters used as single
     set_param(mdl, 'UnconnectedInputMsg', 'error');
     set_param(mdl, 'UnconnectedOutputMsg', 'error');
     set_param(mdl, 'UnconnectedLineMsg', 'error');
@@ -118,7 +119,8 @@ end
 % =====================================================================================
 function connectTopLevel(mdl)
     % UvMonEna of the previous task (breaks the FaultMonitor <-> state machine loop)
-    mbd_add('built-in/UnitDelay', [mdl '/UvMonEnaPrev'], mbd_pos(4, 13), 'InitialCondition', '0');
+    mbd_add('built-in/UnitDelay', [mdl '/UvMonEnaPrev'], mbd_pos(4, 13), 'InitialCondition', '0', ...
+            'SampleTime', 'InvCtrl_Ts_s');
     % DC-link discharged flag for SAFE_DISCHARGE -> OFF
     mbd_add('built-in/Constant', [mdl '/DischargedVolt'], mbd_pos(3, 2), ...
             'Value', 'InvCtrl_DischargedVolt_V', 'OutDataTypeStr', 'single');

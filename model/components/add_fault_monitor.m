@@ -124,7 +124,8 @@ function addDebounce(parent, name, nParam, pos)
     mbd_add('built-in/Constant',  [sys '/N'],         mbd_pos(2, 4), 'Value', nParam, 'OutDataTypeStr', 'uint16');
     mbd_add('built-in/Constant',  [sys '/One'],       mbd_pos(2, 3), 'Value', '1', 'OutDataTypeStr', 'uint16');
     mbd_add('built-in/Constant',  [sys '/Zero'],      mbd_pos(3, 4), 'Value', '0', 'OutDataTypeStr', 'uint16');
-    mbd_add('built-in/UnitDelay', [sys '/CountPrev'], mbd_pos(2, 1), 'InitialCondition', '0');
+    mbd_add('built-in/UnitDelay', [sys '/CountPrev'], mbd_pos(2, 1), 'InitialCondition', '0', ...
+            'SampleTime', 'InvCtrl_Ts_s');
     mbd_add('built-in/Sum',       [sys '/CountInc'],  mbd_pos(3, 1), 'Inputs', '++', 'OutDataTypeStr', 'uint16');
     mbd_add('built-in/MinMax',    [sys '/CountSat'],  mbd_pos(4, 1), 'Function', 'min', 'Inputs', '2', ...
             'OutDataTypeStr', 'uint16');

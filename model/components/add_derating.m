@@ -55,7 +55,8 @@ function add_derating(mdl, pos)
     mbd_line(sys, 'ZeroTrq/1',   'TrqTarget/3');
 
     % ---- rate limiter (max InvCtrl_TrqSlewStep_Nm per task), final saturation, gate
-    mbd_add('built-in/UnitDelay', [sys '/TrqCmdPrev'], mbd_pos(9, 4), 'InitialCondition', '0');
+    mbd_add('built-in/UnitDelay', [sys '/TrqCmdPrev'], mbd_pos(9, 4), 'InitialCondition', '0', ...
+            'SampleTime', 'InvCtrl_Ts_s');
     mbd_add('built-in/Sum',       [sys '/TrqDelta'],   mbd_pos(9, 1), 'Inputs', '+-', 'OutDataTypeStr', 'single');
     mbd_add('built-in/Saturate',  [sys '/SlewLimit'],  mbd_pos(10, 1), ...
             'UpperLimit', 'InvCtrl_TrqSlewStep_Nm', 'LowerLimit', '-InvCtrl_TrqSlewStep_Nm');

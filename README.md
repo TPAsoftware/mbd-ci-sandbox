@@ -93,8 +93,8 @@ To run single tests: `inv_ctrl_setup; addpath('tests'); runtests('StateMachineTe
 2. `run_mil_tests` builds the model and runs the MIL suite; the job fails if any test fails;
 3. the job summary shows the result per test with its requirement IDs and the first
    failure message;
-4. the artifact `mil-results` contains the JUnit XML, the plots, pictures of the model
-   and the generated `InvCtrl.slx`.
+4. the artifact `mil-results` contains the JUnit XML, the summary, the plots and the
+   generated `InvCtrl.slx`.
 
 ## Modelling guidelines
 

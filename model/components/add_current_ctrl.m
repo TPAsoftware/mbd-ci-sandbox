@@ -84,7 +84,8 @@ function addPiAxis(parent, name, pos)
     mbd_add('built-in/Sum',       [sys '/Err'],       mbd_pos(2, 1), 'Inputs', '+-', 'OutDataTypeStr', 'single');
     mbd_add('built-in/Gain',      [sys '/Kp'],        mbd_pos(3, 1), 'Gain', 'InvCtrl_CurCtrl_Kp_VpA');
     mbd_add('built-in/Gain',      [sys '/KiTs'],      mbd_pos(3, 3), 'Gain', 'InvCtrl_CurCtrl_KiTs_VpA');
-    mbd_add('built-in/UnitDelay', [sys '/IntPrev'],   mbd_pos(3, 5), 'InitialCondition', '0');
+    mbd_add('built-in/UnitDelay', [sys '/IntPrev'],   mbd_pos(3, 5), 'InitialCondition', '0', ...
+            'SampleTime', 'InvCtrl_Ts_s');
     mbd_add('built-in/Sum',       [sys '/USum'],      mbd_pos(4, 1), 'Inputs', '++', 'OutDataTypeStr', 'single');
     mbd_add('simulink/Discontinuities/Saturation Dynamic', [sys '/USat'], mbd_pos(5, 1, 70, 60));
     mbd_add('built-in/RelationalOperator', [sys '/SatActive'], mbd_pos(6, 2), ...
