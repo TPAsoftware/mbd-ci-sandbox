@@ -33,7 +33,7 @@ jobs:
       - name: Build model and run MIL tests
         uses: matlab-actions/run-command@v3
         with:
-          command: addpath('scripts'); run_mil_tests
+          command: addpath('scripts'); diagnose_model; run_mil_tests
           generate-summary: false
 
       - name: Upload test results, plots and model
