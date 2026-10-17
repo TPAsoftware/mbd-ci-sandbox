@@ -1,0 +1,47 @@
+name: MIL tests
+
+# Builds InvCtrl from its scripted definition (model/) and runs the
+# model-in-the-loop test suite (tests/) on every push, on every branch.
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mil-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mil:
+    name: Build model and run MIL tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up MATLAB, Simulink and Stateflow
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2025a
+          products: Simulink Stateflow
+          cache: true
+
+      - name: Build model and run MIL tests
+        uses: matlab-actions/run-command@v3
+        with:
+          command: addpath('scripts'); run_mil_tests
+          generate-summary: false
+
+      - name: Upload test results, plots and model
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mil-results
+          path: |
+            results/
+            work/InvCtrl.slx
+          if-no-files-found: warn

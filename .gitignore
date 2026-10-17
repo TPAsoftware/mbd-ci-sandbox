@@ -1,0 +1,19 @@
+# generated model, Simulink cache and build output
+work/
+slprj/
+*.slxc
+*.slx.autosave
+*.slx.original
+*.mexa64
+*.mexw64
+*.mexmaci64
+*.mexmaca64
+codegen/
+
+# test output
+results/
+
+# editor files
+*.asv
+*.m~
+.DS_Store

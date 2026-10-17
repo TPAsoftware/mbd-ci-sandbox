@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.m   text eol=lf diff=matlab
+*.md  text eol=lf
+*.yml text eol=lf
+*.slx binary
+*.mat binary
+*.png binary
