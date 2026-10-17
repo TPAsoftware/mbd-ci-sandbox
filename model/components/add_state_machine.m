@@ -86,7 +86,7 @@ function add_state_machine(mdl, pos)
         sDis,   sFault, fault,                               1, 6, 9    % REQ-INV-008
         sDis,   sOff,   '[DcLinkDischarged]',                2, 0, 6    % REQ-INV-007
         % FAULT -> STANDBY on fault reset once no fault is active (REQ-INV-009, REQ-INV-010)
-        sFault, sStby,  '[FaultReset && !FaultActive]',      1, 1, 5
+        sFault, sStby,  '[hasChangedTo(FaultReset, true) && !FaultActive]', 1, 1, 5
         };
     for k = 1:size(T, 1)
         addTransition(ch, T{k, :});
