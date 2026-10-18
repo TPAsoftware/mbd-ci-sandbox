@@ -55,6 +55,7 @@ function file = export_test_plot(outDir)
 
     % verdict: did InvState leave FAULT before the new rising edge?
     sFault = 6;
+    met = false;
     kFault = find(state == sFault, 1);
     if isempty(kFault)
         verdict = 'InvState never entered FAULT';
@@ -62,6 +63,7 @@ function file = export_test_plot(outDir)
         window = kFault:find(t >= tNewEdge, 1) - 1;
         kLeft = find(state(window) ~= sFault, 1);
         if isempty(kLeft)
+            met = true;
             verdict = sprintf('InvState stays in FAULT until the new rising edge of FaultReset at %.0f ms: REQ-INV-010 met', 1e3 * tNewEdge);
         else
             verdict = sprintf('InvState leaves FAULT at %.0f ms without a new rising edge of FaultReset: REQ-INV-010 violated', tm(window(kLeft)));
@@ -91,12 +93,13 @@ function file = export_test_plot(outDir)
 
     ax = nexttile(tl);
     hold(ax, 'on');
-    stairs(ax, tm, reset, 'LineWidth', 1.6);
-    stairs(ax, tm, pwm, 'LineWidth', 1.6);
+    h1 = stairs(ax, tm, reset, 'LineWidth', 1.6);
+    h2 = stairs(ax, tm, pwm, 'LineWidth', 1.6);
     ylim(ax, [-0.1 1.1]);
     ylabel(ax, 'flags');
-    legend(ax, {'FaultReset (input)', 'PwmEnable'}, 'Location', 'west', 'Interpreter', 'none');
     decorate(ax, marks);
+    legend(ax, [h1 h2], {'FaultReset (input)', 'PwmEnable'}, 'Location', 'west', 'Interpreter', 'none', ...
+           'AutoUpdate', 'off');
 
     ax = nexttile(tl);
     plot(ax, tm, torque, 'LineWidth', 1.6);
@@ -107,7 +110,12 @@ function file = export_test_plot(outDir)
     header = sprintf(['Overcurrent %.0f-%.0f ms | FaultReset rises at %.0f ms (fault still active), held TRUE until %.0f ms | ' ...
                       'new rising edge at %.0f ms'], 1e3 * tOvercurrent, 1e3 * tFaultGone, 1e3 * tResetRises, ...
                      1e3 * tResetLow, 1e3 * tNewEdge);
-    title(tl, {header, verdict}, 'Interpreter', 'none', 'FontWeight', 'bold', 'FontSize', 11);
+    if met
+        verdictColor = [0 0.45 0];
+    else
+        verdictColor = [0.75 0 0];
+    end
+    title(tl, {header, verdict}, 'Interpreter', 'none', 'FontWeight', 'bold', 'FontSize', 11, 'Color', verdictColor);
 
     file = fullfile(outDir, 'FaultReset_test_plot.png');
     exportgraphics(f, file, 'Resolution', 150);
