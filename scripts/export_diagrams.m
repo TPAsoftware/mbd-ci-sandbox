@@ -14,17 +14,24 @@ function files = export_diagrams(outDir)
 %     05_FaultMonitor        subsystem: debounced fault detection
 %     06_StateMachine        Stateflow chart InvStateMachine, all states and transitions
 %
-%   Every picture is written as PNG (required) and as SVG and PDF (best effort). The
-%   methods are tried in this order and the first one that leaves a usable file wins:
-%   print -s<system>, saveas, and for the chart also sfprint. For the chart the result
-%   of every method is kept as <name>__<method>.<ext>.
+%   The set is exported twice, in two folders of outDir:
+%     native/   the layout exactly as model/build_inv_ctrl.m creates it
+%     tidy/     layout only tidied for reading (Simulink.BlockDiagram.arrangeSystem for the
+%               block diagrams, states on a grid with every label next to its transition for
+%               the chart); blocks, states, transitions and their text are not touched
+%
+%   Every picture is written as PNG, SVG and PDF. The methods are tried in this order and
+%   the first one that leaves a usable file wins: print -s<system>, saveas and, for the
+%   chart, sfprint. print and saveas of a chart block only draw the block symbol (174 x 222
+%   px), so for the chart sfprint is tried first.
 %
 %   Simulink does not print in the no-display mode of MATLAB, so on a headless Linux
 %   machine MATLAB has to run under a virtual display (see .github/workflows/diagrams.yml).
 %
 %   Also written to outDir:
-%     EXPORT_LOG.txt                 every attempt with its result or error message
-%     StateMachine_transitions.txt   data, states and transitions of the chart as text
+%     EXPORT_LOG.txt                          every attempt with its result or error message
+%     StateMachine_transitions.txt            data, states and transitions of the chart as text
+%     StateMachine_geometry_<layout>.txt      positions of the chart objects
 %   Throws an error when a PNG is missing, so the CI job fails.
 
     files = {};
@@ -48,7 +55,8 @@ function files = export_diagrams(outDir)
     end
     load_system(fullfile(root, 'work', 'InvCtrl.slx'));
 
-    writeChartText(logFile, fullfile(outDir, 'StateMachine_transitions.txt'), 'InvCtrl/InvStateMachine');
+    chartPath = 'InvCtrl/InvStateMachine';
+    writeChartText(logFile, fullfile(outDir, 'StateMachine_transitions.txt'), chartPath);
 
     % name, system, is it a Stateflow chart?
     targets = {
@@ -57,23 +65,23 @@ function files = export_diagrams(outDir)
         '03_CurrentCtrl',       'InvCtrl/CurrentCtrl',     false
         '04_Derating',          'InvCtrl/Derating',        false
         '05_FaultMonitor',      'InvCtrl/FaultMonitor',    false
-        '06_StateMachine',      'InvCtrl/InvStateMachine', true};
+        '06_StateMachine',      chartPath,                 true};
+
     missing = {};
-    for k = 1:size(targets, 1)
-        name = targets{k, 1};
-        sys = targets{k, 2};
-        isChart = targets{k, 3};
-        say(logFile, '--- %s (%s)', name, sys);
-        formats = {'png', 'svg', 'pdf'};
-        for f = 1:numel(formats)
-            file = fullfile(outDir, [name '.' formats{f}]);
-            if exportImage(logFile, sys, isChart, formats{f}, file)
-                files{end + 1} = file; %#ok<AGROW>
-            elseif strcmp(formats{f}, 'png')
-                missing{end + 1} = name; %#ok<AGROW>
-            end
-        end
-    end
+
+    say(logFile, '=== native layout');
+    writeChartGeometry(logFile, fullfile(outDir, 'StateMachine_geometry_native.txt'), chartPath);
+    [f, m] = exportAll(logFile, fullfile(outDir, 'native'), targets);
+    files = [files, f];
+    missing = [missing, m];
+
+    say(logFile, '=== tidy layout');
+    tidyLayout(logFile, chartPath);
+    writeChartGeometry(logFile, fullfile(outDir, 'StateMachine_geometry_tidy.txt'), chartPath);
+    [f, m] = exportAll(logFile, fullfile(outDir, 'tidy'), targets);
+    files = [files, f];
+    missing = [missing, m];
+
     close_system('InvCtrl', 0);
 
     say(logFile, '%d files in %s', numel(files), outDir);
@@ -84,37 +92,54 @@ function files = export_diagrams(outDir)
 end
 
 % =====================================================================================
+function [files, missing] = exportAll(logFile, outDir, targets)
+    if ~isfolder(outDir)
+        mkdir(outDir);
+    end
+    files = {};
+    missing = {};
+    formats = {'png', 'svg', 'pdf'};
+    for k = 1:size(targets, 1)
+        name = targets{k, 1};
+        sys = targets{k, 2};
+        isChart = targets{k, 3};
+        say(logFile, '--- %s (%s)', name, sys);
+        for f = 1:numel(formats)
+            file = fullfile(outDir, [name '.' formats{f}]);
+            if exportImage(logFile, sys, isChart, formats{f}, file)
+                files{end + 1} = file; %#ok<AGROW>
+            elseif strcmp(formats{f}, 'png')
+                missing{end + 1} = [name ' (' outDir ')']; %#ok<AGROW>
+            end
+        end
+    end
+end
+
 function ok = exportImage(logFile, sys, isChart, fmt, file)
-    % print -s first, then saveas, then (chart only) sfprint; the first usable file wins
+    % print -s first, then saveas; for a chart sfprint first (print only draws the block symbol)
     tries = {'print', 'saveas'};
     if isChart
-        tries{end + 1} = 'sfprint';
+        tries = {'sfprint'};
+        if strcmp(fmt, 'png')
+            tries = {'sfprint', 'print', 'saveas'};
+        end
     end
-    [folder, base, ext] = fileparts(file);
     ok = false;
     for i = 1:numel(tries)
-        if ok && ~isChart
-            break       % a block diagram needs one working method, the chart keeps all
+        if isfile(file)
+            delete(file);
         end
-        m = tries{i};
-        out = file;
-        if isChart
-            out = fullfile(folder, [base '__' m ext]);
-        end
-        if isfile(out)
-            delete(out);
-        end
-        [good, why] = runMethod(m, sys, fmt, out);
+        [good, why] = runMethod(tries{i}, sys, fmt, file);
         if good
             tag = 'ok';
         else
             tag = 'FAILED';
         end
-        say(logFile, '  %-8s %-4s %-7s %s', m, fmt, tag, why);
-        if good && ~ok && isChart
-            copyfile(out, file);
+        say(logFile, '  %-8s %-4s %-7s %s', tries{i}, fmt, tag, why);
+        if good
+            ok = true;
+            return
         end
-        ok = ok || good;
     end
 end
 
@@ -182,6 +207,200 @@ function [good, why] = checkFile(file, fmt)
 end
 
 % =====================================================================================
+function tidyLayout(logFile, chartPath)
+    % layout only: nothing of the logic is touched
+    systems = {'InvCtrl', 'InvCtrl/TorqueToCurrent', 'InvCtrl/CurrentCtrl', ...
+               'InvCtrl/Derating', 'InvCtrl/FaultMonitor'};
+    for k = 1:numel(systems)
+        try
+            Simulink.BlockDiagram.arrangeSystem(systems{k}, 'FullLayout', 'true');
+            say(logFile, 'arranged %s', systems{k});
+        catch err
+            say(logFile, 'arrangeSystem of %s failed: %s', systems{k}, strrep(err.message, newline, ' '));
+        end
+    end
+    try
+        tidyChart(logFile, chartPath);
+    catch err
+        say(logFile, 'chart layout not tidied: %s', strrep(err.message, newline, ' '));
+    end
+end
+
+function tidyChart(logFile, chartPath)
+    % Presentation layout of the state machine: the normal sequence runs down the middle
+    % column, SAFE_DISCHARGE is on the left and FAULT on the right, all transitions are
+    % straight except SAFE_DISCHARGE -> FAULT, every label sits beside its transition.
+    % Only positions are changed (states, o'clock positions, mid points, labels).
+    W = 260;
+    H = 100;
+    HF = 130;
+    colX = [60, 510, 960];
+    rowY = [60, 240, 420, 600];
+    % state, column, row, height
+    layout = {
+        'OFF',            1, 1, H
+        'STANDBY',        2, 1, H
+        'PRECHARGE',      2, 2, H
+        'READY',          2, 3, H
+        'RUN',            2, 4, H
+        'SAFE_DISCHARGE', 1, 3, H
+        'FAULT',          3, 3, HF};
+    % source, destination, source o'clock, destination o'clock, label side (x y), label position along the line
+    spec = {
+        'OFF',              'STANDBY',           2.40,  9.60,  0, -1, 0.5
+        'STANDBY',          'OFF',               8.40,  3.60,  0,  1, 0.5
+        'STANDBY',          'PRECHARGE',         6.00, 11.99, -1,  0, 0.5
+        'PRECHARGE',        'READY',             6.00, 11.99,  1,  0, 0.5
+        'PRECHARGE',        'SAFE_DISCHARGE',    9.00,  2.10, -1,  1, 0.5
+        'PRECHARGE',        'FAULT',             3.00,  9.92, -1,  1, 0.5
+        'READY',            'RUN',               5.52,  0.48,  1,  0, 0.5
+        'RUN',              'READY',            11.52,  6.48, -1,  0, 0.5
+        'READY',            'SAFE_DISCHARGE',    9.00,  3.00,  0, -1, 0.5
+        'READY',            'FAULT',             3.00,  9.00,  0, -1, 0.5
+        'RUN',              'SAFE_DISCHARGE',    9.00,  3.90, -1,  1, 0.5
+        'RUN',              'FAULT',             3.00,  6.78,  1,  1, 0.5
+        'SAFE_DISCHARGE',   'OFF',              11.99,  6.00,  1,  0, 0.5
+        'SAFE_DISCHARGE',   'FAULT',             6.00,  5.46,  0,  1, 0.5
+        'STANDBY',          'FAULT',             3.75, 10.98, -1,  1, 0.3
+        'FAULT',            'STANDBY',           0.30,  2.25,  1, -1, 0.5};
+    % the one curved transition: SAFE_DISCHARGE -> FAULT passes below RUN
+    arcKey = 'SAFE_DISCHARGE>FAULT';
+    arcMid = [640, 830];
+
+    rt = sfroot;
+    ch = rt.find('-isa', 'Stateflow.Chart', 'Path', chartPath);
+    sts = ch.find('-isa', 'Stateflow.State');
+    pos = struct();
+    for j = 1:numel(sts)
+        row = find(strcmp(layout(:, 1), sts(j).Name), 1);
+        if isempty(row)
+            error('export_diagrams:state', 'No layout for state %s.', sts(j).Name);
+        end
+        p = [colX(layout{row, 2}), rowY(layout{row, 3}), W, layout{row, 4}];
+        if layout{row, 4} ~= H
+            p(2) = p(2) + H / 2 - layout{row, 4} / 2;    % taller box: same center line as the others
+        end
+        sts(j).Position = p;
+        pos.(sts(j).Name) = p;
+    end
+
+    trs = ch.find('-isa', 'Stateflow.Transition');
+    keys = cell(numel(trs), 1);
+    for j = 1:numel(trs)
+        t = trs(j);
+        if isempty(t.Source)
+            keys{j} = '';
+            continue
+        end
+        keys{j} = [t.Source.Name '>' t.Destination.Name];
+        row = find(strcmp(spec(:, 1), t.Source.Name) & strcmp(spec(:, 2), t.Destination.Name), 1);
+        if isempty(row)
+            error('export_diagrams:transition', 'No layout for transition %s.', keys{j});
+        end
+        t.SourceOClock = spec{row, 3};
+        t.DestinationOClock = spec{row, 4};
+    end
+
+    for j = 1:numel(trs)
+        t = trs(j);
+        if isempty(t.Source)
+            % default transition into OFF: short arrow from above, as in build_inv_ctrl
+            p = pos.(t.Destination.Name);
+            t.DestinationOClock = 0;
+            x0 = p(1) + p(3) / 2;
+            t.SourceEndpoint = [x0, p(2) - 30];
+            t.Midpoint = [x0, p(2) - 15];
+            continue
+        end
+        row = find(strcmp(spec(:, 1), t.Source.Name) & strcmp(spec(:, 2), t.Destination.Name), 1);
+        s = t.SourceEndpoint;
+        d = t.DestinationEndpoint;
+        if strcmp(keys{j}, arcKey)
+            t.Midpoint = arcMid;
+        else
+            t.Midpoint = (s + d) / 2;
+        end
+        % label beside the line: the box of the label touches a parallel of the line
+        dirv = d - s;
+        u = dirv / norm(dirv);
+        n = [-u(2), u(1)];
+        side = [spec{row, 5}, spec{row, 6}];
+        if n(1) * side(1) + n(2) * side(2) < 0
+            n = -n;
+        end
+        if spec{row, 7} == 0.5
+            P = t.Midpoint;
+        else
+            P = s + spec{row, 7} * dirv;
+        end
+        lp = t.LabelPosition;
+        w = lp(3);
+        h = lp(4);
+        c = P + n * (abs(n(1)) * w / 2 + abs(n(2)) * h / 2 + 6);
+        t.LabelPosition = [c(1) - w / 2, c(2) - h / 2, w, h];
+    end
+    say(logFile, 'chart layout tidied (%d states, %d transitions)', numel(sts), numel(trs));
+end
+
+function p = clockPoint(pos, c)
+    % point on the border of a state for an o'clock value: 12 top, 3 right, 6 bottom, 9 left,
+    % the corners are at 1.5, 4.5, 7.5 and 10.5
+    x = pos(1);
+    y = pos(2);
+    w = pos(3);
+    h = pos(4);
+    c = mod(c, 12);
+    if c >= 10.5 || c <= 1.5
+        if c > 6
+            c = c - 12;
+        end
+        p = [x + w / 2 + c / 1.5 * w / 2, y];
+    elseif c <= 4.5
+        p = [x + w, y + h / 2 + (c - 3) / 1.5 * h / 2];
+    elseif c <= 7.5
+        p = [x + w / 2 + (6 - c) / 1.5 * w / 2, y + h];
+    else
+        p = [x, y + h / 2 + (9 - c) / 1.5 * h / 2];
+    end
+end
+
+% =====================================================================================
+function writeChartGeometry(logFile, textFile, chartPath)
+    % positions of the states and of the transitions, with the border point that follows from
+    % the o'clock value (calc) next to the one MATLAB reports
+    lines = {};
+    try
+        rt = sfroot;
+        ch = rt.find('-isa', 'Stateflow.Chart', 'Path', chartPath);
+        sts = ch.find('-isa', 'Stateflow.State');
+        for j = 1:numel(sts)
+            lines{end + 1} = sprintf('state %-15s position %s', sts(j).Name, mat2str(sts(j).Position, 5)); %#ok<AGROW>
+        end
+        trs = ch.find('-isa', 'Stateflow.Transition');
+        for j = 1:numel(trs)
+            t = trs(j);
+            if isempty(t.Source)
+                lines{end + 1} = sprintf('trans (default)  -> %-15s src %s mid %s dst %s', ...
+                    t.Destination.Name, mat2str(t.SourceEndpoint, 5), mat2str(t.Midpoint, 5), ...
+                    mat2str(t.DestinationEndpoint, 5)); %#ok<AGROW>
+                continue
+            end
+            calcS = clockPoint(t.Source.Position, t.SourceOClock);
+            calcD = clockPoint(t.Destination.Position, t.DestinationOClock);
+            lines{end + 1} = sprintf(['trans %-15s -> %-15s clock %5.2f -> %5.2f | src %s (calc %s) | mid %s | ' ...
+                'dst %s (calc %s) | label %s'], t.Source.Name, t.Destination.Name, t.SourceOClock, ...
+                t.DestinationOClock, mat2str(t.SourceEndpoint, 5), mat2str(calcS, 5), mat2str(t.Midpoint, 5), ...
+                mat2str(t.DestinationEndpoint, 5), mat2str(calcD, 5), mat2str(t.LabelPosition, 5)); %#ok<AGROW>
+        end
+    catch err
+        say(logFile, 'chart geometry not written: %s', strrep(err.message, newline, ' '));
+        return
+    end
+    fid = fopen(textFile, 'w');
+    fprintf(fid, '%s\n', lines{:});
+    fclose(fid);
+end
+
 function writeChartText(logFile, textFile, chartPath)
     % data, states and transitions of the chart as text (needs no display)
     lines = {};
@@ -209,7 +428,7 @@ function writeChartText(logFile, textFile, chartPath)
                 t.Destination.Name, t.ExecutionOrder, strrep(t.LabelString, newline, ' ')); %#ok<AGROW>
         end
     catch err
-        say(logFile, 'chart text not written: %s', err.message);
+        say(logFile, 'chart text not written: %s', strrep(err.message, newline, ' '));
         return
     end
     fid = fopen(textFile, 'w');
@@ -220,14 +439,6 @@ end
 function logEnvironment(logFile)
     say(logFile, 'MATLAB %s on %s, DISPLAY=''%s''', version('-release'), computer, getenv('DISPLAY'));
     say(logFile, 'usejava: jvm=%d awt=%d desktop=%d', usejava('jvm'), usejava('awt'), usejava('desktop'));
-    if isunix
-        % the command line of MATLAB shows whether it was started with -nodisplay
-        [~, out] = system(['ps -eo ppid,pid,args | grep -i "[m]atlab" | cut -c1-300 | ' ...
-                           'sed -E ''s/[A-Za-z0-9_-]{24,}/<id>/g''']);
-        say(logFile, 'MATLAB processes:\n%s', strtrim(out));
-        [~, out] = system('pgrep -a Xvfb');
-        say(logFile, 'Xvfb: %s', strtrim(out));
-    end
 end
 
 function say(logFile, fmt, varargin)
