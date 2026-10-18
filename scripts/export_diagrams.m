@@ -31,7 +31,6 @@ function files = export_diagrams(outDir)
 %   Also written to outDir:
 %     EXPORT_LOG.txt                          every attempt with its result or error message
 %     StateMachine_transitions.txt            data, states and transitions of the chart as text
-%     StateMachine_geometry_<layout>.txt      positions of the chart objects
 %   Throws an error when a PNG is missing, so the CI job fails.
 
     files = {};
@@ -70,14 +69,12 @@ function files = export_diagrams(outDir)
     missing = {};
 
     say(logFile, '=== native layout');
-    writeChartGeometry(logFile, fullfile(outDir, 'StateMachine_geometry_native.txt'), chartPath);
     [f, m] = exportAll(logFile, fullfile(outDir, 'native'), targets);
     files = [files, f];
     missing = [missing, m];
 
     say(logFile, '=== tidy layout');
     tidyLayout(logFile, chartPath);
-    writeChartGeometry(logFile, fullfile(outDir, 'StateMachine_geometry_tidy.txt'), chartPath);
     [f, m] = exportAll(logFile, fullfile(outDir, 'tidy'), targets);
     files = [files, f];
     missing = [missing, m];
@@ -228,9 +225,10 @@ end
 
 function tidyChart(logFile, chartPath)
     % Presentation layout of the state machine: the normal sequence runs down the middle
-    % column, SAFE_DISCHARGE is on the left and FAULT on the right, all transitions are
-    % straight except SAFE_DISCHARGE -> FAULT, every label sits beside its transition.
-    % Only positions are changed (states, o'clock positions, mid points, labels).
+    % column, SAFE_DISCHARGE is on the left and FAULT on the right, no transition runs
+    % behind a state and every label sits beside its transition (Stateflow draws the
+    % diagonal transitions as smooth curves). Only positions are changed: states, o'clock
+    % positions, mid points and labels; states, transitions and their text stay as built.
     W = 260;
     H = 100;
     HF = 130;
@@ -245,24 +243,25 @@ function tidyChart(logFile, chartPath)
         'RUN',            2, 4, H
         'SAFE_DISCHARGE', 1, 3, H
         'FAULT',          3, 3, HF};
-    % source, destination, source o'clock, destination o'clock, label side (x y), label position along the line
+    % source, destination, source o'clock, destination o'clock, label side (x y), label position along
+    % the line, distance of the label from the line (the long guard FAULT -> STANDBY gets room for the curve)
     spec = {
-        'OFF',              'STANDBY',           2.40,  9.60,  0, -1, 0.5
-        'STANDBY',          'OFF',               8.40,  3.60,  0,  1, 0.5
-        'STANDBY',          'PRECHARGE',         6.00, 11.99, -1,  0, 0.5
-        'PRECHARGE',        'READY',             6.00, 11.99,  1,  0, 0.5
-        'PRECHARGE',        'SAFE_DISCHARGE',    9.00,  2.10, -1,  1, 0.5
-        'PRECHARGE',        'FAULT',             3.00,  9.92, -1,  1, 0.5
-        'READY',            'RUN',               5.52,  0.48,  1,  0, 0.5
-        'RUN',              'READY',            11.52,  6.48, -1,  0, 0.5
-        'READY',            'SAFE_DISCHARGE',    9.00,  3.00,  0, -1, 0.5
-        'READY',            'FAULT',             3.00,  9.00,  0, -1, 0.5
-        'RUN',              'SAFE_DISCHARGE',    9.00,  3.90, -1,  1, 0.5
-        'RUN',              'FAULT',             3.00,  6.78,  1,  1, 0.5
-        'SAFE_DISCHARGE',   'OFF',              11.99,  6.00,  1,  0, 0.5
-        'SAFE_DISCHARGE',   'FAULT',             6.00,  5.46,  0,  1, 0.5
-        'STANDBY',          'FAULT',             3.75, 10.98, -1,  1, 0.3
-        'FAULT',            'STANDBY',           0.30,  2.25,  1, -1, 0.5};
+        'OFF',              'STANDBY',           2.40,  9.60,  0, -1, 0.5, 6
+        'STANDBY',          'OFF',               8.40,  3.60,  0,  1, 0.5, 6
+        'STANDBY',          'PRECHARGE',         6.00, 11.99, -1,  0, 0.5, 6
+        'PRECHARGE',        'READY',             6.00, 11.99,  1,  0, 0.5, 6
+        'PRECHARGE',        'SAFE_DISCHARGE',    9.00,  2.10, -1,  1, 0.5, 6
+        'PRECHARGE',        'FAULT',             3.00,  9.92, -1,  1, 0.5, 6
+        'READY',            'RUN',               5.52,  0.48,  1,  0, 0.5, 6
+        'RUN',              'READY',            11.52,  6.48, -1,  0, 0.5, 6
+        'READY',            'SAFE_DISCHARGE',    9.00,  3.00,  0, -1, 0.5, 6
+        'READY',            'FAULT',             3.00,  9.00,  0, -1, 0.5, 6
+        'RUN',              'SAFE_DISCHARGE',    9.00,  3.90, -1,  1, 0.5, 6
+        'RUN',              'FAULT',             3.00,  6.78,  1,  1, 0.5, 6
+        'SAFE_DISCHARGE',   'OFF',              11.99,  6.00,  1,  0, 0.5, 6
+        'SAFE_DISCHARGE',   'FAULT',             6.00,  5.46,  0,  1, 0.5, 6
+        'STANDBY',          'FAULT',             3.75, 10.98, -1,  1, 0.3, 6
+        'FAULT',            'STANDBY',           0.30,  2.25,  1, -1, 0.5, 36};
     % the one curved transition: SAFE_DISCHARGE -> FAULT passes below RUN
     arcKey = 'SAFE_DISCHARGE>FAULT';
     arcMid = [640, 830];
@@ -336,69 +335,10 @@ function tidyChart(logFile, chartPath)
         lp = t.LabelPosition;
         w = lp(3);
         h = lp(4);
-        c = P + n * (abs(n(1)) * w / 2 + abs(n(2)) * h / 2 + 6);
+        c = P + n * (abs(n(1)) * w / 2 + abs(n(2)) * h / 2 + spec{row, 8});
         t.LabelPosition = [c(1) - w / 2, c(2) - h / 2, w, h];
     end
     say(logFile, 'chart layout tidied (%d states, %d transitions)', numel(sts), numel(trs));
-end
-
-function p = clockPoint(pos, c)
-    % point on the border of a state for an o'clock value: 12 top, 3 right, 6 bottom, 9 left,
-    % the corners are at 1.5, 4.5, 7.5 and 10.5
-    x = pos(1);
-    y = pos(2);
-    w = pos(3);
-    h = pos(4);
-    c = mod(c, 12);
-    if c >= 10.5 || c <= 1.5
-        if c > 6
-            c = c - 12;
-        end
-        p = [x + w / 2 + c / 1.5 * w / 2, y];
-    elseif c <= 4.5
-        p = [x + w, y + h / 2 + (c - 3) / 1.5 * h / 2];
-    elseif c <= 7.5
-        p = [x + w / 2 + (6 - c) / 1.5 * w / 2, y + h];
-    else
-        p = [x, y + h / 2 + (9 - c) / 1.5 * h / 2];
-    end
-end
-
-% =====================================================================================
-function writeChartGeometry(logFile, textFile, chartPath)
-    % positions of the states and of the transitions, with the border point that follows from
-    % the o'clock value (calc) next to the one MATLAB reports
-    lines = {};
-    try
-        rt = sfroot;
-        ch = rt.find('-isa', 'Stateflow.Chart', 'Path', chartPath);
-        sts = ch.find('-isa', 'Stateflow.State');
-        for j = 1:numel(sts)
-            lines{end + 1} = sprintf('state %-15s position %s', sts(j).Name, mat2str(sts(j).Position, 5)); %#ok<AGROW>
-        end
-        trs = ch.find('-isa', 'Stateflow.Transition');
-        for j = 1:numel(trs)
-            t = trs(j);
-            if isempty(t.Source)
-                lines{end + 1} = sprintf('trans (default)  -> %-15s src %s mid %s dst %s', ...
-                    t.Destination.Name, mat2str(t.SourceEndpoint, 5), mat2str(t.Midpoint, 5), ...
-                    mat2str(t.DestinationEndpoint, 5)); %#ok<AGROW>
-                continue
-            end
-            calcS = clockPoint(t.Source.Position, t.SourceOClock);
-            calcD = clockPoint(t.Destination.Position, t.DestinationOClock);
-            lines{end + 1} = sprintf(['trans %-15s -> %-15s clock %5.2f -> %5.2f | src %s (calc %s) | mid %s | ' ...
-                'dst %s (calc %s) | label %s'], t.Source.Name, t.Destination.Name, t.SourceOClock, ...
-                t.DestinationOClock, mat2str(t.SourceEndpoint, 5), mat2str(calcS, 5), mat2str(t.Midpoint, 5), ...
-                mat2str(t.DestinationEndpoint, 5), mat2str(calcD, 5), mat2str(t.LabelPosition, 5)); %#ok<AGROW>
-        end
-    catch err
-        say(logFile, 'chart geometry not written: %s', strrep(err.message, newline, ' '));
-        return
-    end
-    fid = fopen(textFile, 'w');
-    fprintf(fid, '%s\n', lines{:});
-    fclose(fid);
 end
 
 function writeChartText(logFile, textFile, chartPath)
