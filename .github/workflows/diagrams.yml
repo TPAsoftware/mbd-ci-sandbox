@@ -42,12 +42,6 @@ jobs:
           products: Simulink Stateflow
           cache: true
 
-      - name: Show the display and the MATLAB launcher
-        run: |
-          echo "DISPLAY=$DISPLAY"
-          which matlab matlab-batch || true
-          timeout 30 matlab-batch -help 2>&1 | head -n 40 || true
-
       - name: Build model and export diagrams
         uses: matlab-actions/run-command@v3
         timeout-minutes: 20
