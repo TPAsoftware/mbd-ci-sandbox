@@ -50,22 +50,20 @@ jobs:
           startup-options: -softwareopengl
           generate-summary: false
 
-      - name: Plot the test of REQ-INV-010
+      - name: Plot the REQ-INV-010 scenario
         if: always()
         continue-on-error: true
         uses: matlab-actions/run-command@v3
         timeout-minutes: 10
         with:
-          command: addpath('scripts'); inv_ctrl_setup; addpath('tests'); runtests('StateMachineTest', 'ProcedureName', 'testFaultResetRequiresRisingEdge');
+          command: addpath('scripts'); export_test_plot
           startup-options: -softwareopengl
           generate-summary: false
 
-      - name: Upload diagrams and the test plot
+      - name: Upload diagrams
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: diagrams
-          path: |
-            results/diagrams/
-            results/plots/
+          path: results/diagrams/
           if-no-files-found: warn
