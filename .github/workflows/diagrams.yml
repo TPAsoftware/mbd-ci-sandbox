@@ -1,0 +1,65 @@
+name: Model diagrams
+
+# Renders pictures of InvCtrl with MATLAB (top level, the four main subsystems and the
+# Stateflow state machine) and uploads them as the artifact "diagrams".
+# Simulink does not print in the no-display mode of MATLAB, so the job runs under a
+# virtual display (Xvfb). Run it on a branch named diagrams-* or start it by hand.
+
+on:
+  push:
+    branches:
+      - 'diagrams-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagrams-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagrams:
+    name: Export model diagrams
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Start a virtual display
+        run: |
+          command -v Xvfb > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq xvfb; }
+          nohup Xvfb :99 -screen 0 1920x1080x24 -ac -nolisten tcp > "$RUNNER_TEMP/xvfb.log" 2>&1 &
+          sleep 3
+          pgrep -a Xvfb
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
+      - name: Set up MATLAB, Simulink and Stateflow
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2025a
+          products: Simulink Stateflow
+          cache: true
+
+      - name: Show the display and the MATLAB launcher
+        run: |
+          echo "DISPLAY=$DISPLAY"
+          which matlab matlab-batch || true
+          timeout 30 matlab-batch -help 2>&1 | head -n 40 || true
+
+      - name: Build model and export diagrams
+        uses: matlab-actions/run-command@v3
+        timeout-minutes: 20
+        with:
+          command: addpath('scripts'); export_diagrams
+          startup-options: -softwareopengl
+          generate-summary: false
+
+      - name: Upload diagrams
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagrams
+          path: results/diagrams/
+          if-no-files-found: warn
