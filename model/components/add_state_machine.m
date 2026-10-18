@@ -47,6 +47,8 @@ function add_state_machine(mdl, pos)
         addData(ch, out{k, 1}, 'Output', out{k, 2});
     end
     addData(ch, 'InvCtrl_StbyDwell_tk', 'Parameter', 'Inherit: Same as Simulink');
+    % local data for edge detection (REQ-INV-010)
+    addData(ch, 'FaultResetPrev', 'Local', 'boolean');
 
     % ---- states: name, PwmEnable, UvMonEna, position [x y w h]
     W = 190; H = 95;
@@ -57,6 +59,8 @@ function add_state_machine(mdl, pos)
     sRun   = addState(ch, 'RUN',            true,  true,  [330 270 W H]);
     sRdy   = addState(ch, 'READY',          false, true,  [620 270 W H]);
     sFault = addState(ch, 'FAULT',          false, false, [330 500 W H]);
+    % add during action to FAULT state to track FaultReset for edge detection (REQ-INV-010)
+    sFault.LabelString = [sFault.LabelString, sprintf('\ndu:\nFaultResetPrev = FaultReset;')];
 
     % ---- default transition -> OFF (REQ-INV-001)
     t0 = Stateflow.Transition(ch);
@@ -86,7 +90,7 @@ function add_state_machine(mdl, pos)
         sDis,   sFault, fault,                               1, 6, 9    % REQ-INV-008
         sDis,   sOff,   '[DcLinkDischarged]',                2, 0, 6    % REQ-INV-007
         % FAULT -> STANDBY on fault reset once no fault is active (REQ-INV-009, REQ-INV-010)
-        sFault, sStby,  '[FaultReset && !FaultActive]',      1, 1, 5
+        sFault, sStby,  '[FaultReset && !FaultResetPrev && !FaultActive]',      1, 1, 5
         };
     for k = 1:size(T, 1)
         addTransition(ch, T{k, :});
